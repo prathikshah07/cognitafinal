@@ -11,7 +11,8 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
   const [isActive, setIsActive] = useState(false);
   const [mode, setMode] = useState<'pomodoro' | 'shortBreak' | 'longBreak'>('pomodoro');
   const [completedPomodoros, setCompletedPomodoros] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  // Use number for browser timer id to avoid NodeJS typing and ensure clearInterval works reliably
+  const intervalRef = useRef<number | null>(null);
 
   const presets = {
     pomodoro: 25,
@@ -21,7 +22,11 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
 
   useEffect(() => {
     if (isActive) {
-      intervalRef.current = setInterval(() => {
+      // Always clear any existing interval before setting a new one
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+      }
+      intervalRef.current = window.setInterval(() => {
         if (seconds === 0) {
           if (minutes === 0) {
             handleTimerComplete();
@@ -33,13 +38,15 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
           setSeconds(seconds - 1);
         }
       }, 1000);
-    } else if (intervalRef.current) {
+    } else if (intervalRef.current !== null) {
       clearInterval(intervalRef.current);
+      intervalRef.current = null;
     }
 
     return () => {
-      if (intervalRef.current) {
+      if (intervalRef.current !== null) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
   }, [isActive, minutes, seconds]);
@@ -47,17 +54,22 @@ export default function PomodoroTimer({ onSessionComplete }: PomodoroTimerProps)
   const handleTimerComplete = () => {
     setIsActive(false);
     if (mode === 'pomodoro') {
-      setCompletedPomodoros(completedPomodoros + 1);
+      setCompletedPomodoros((prev) => prev + 1);
       if (onSessionComplete) {
         onSessionComplete(presets.pomodoro);
       }
-      if ((completedPomodoros + 1) % 4 === 0) {
-        setMode('longBreak');
-        setMinutes(presets.longBreak);
-      } else {
-        setMode('shortBreak');
-        setMinutes(presets.shortBreak);
-      }
+      setCompletedPomodoros((prev) => {
+        const next = prev; // prev already incremented in prior set, so derive using callback for consistency
+        const isLongBreak = (next % 4) === 0;
+        if (isLongBreak) {
+          setMode('longBreak');
+          setMinutes(presets.longBreak);
+        } else {
+          setMode('shortBreak');
+          setMinutes(presets.shortBreak);
+        }
+        return next;
+      });
     } else {
       setMode('pomodoro');
       setMinutes(presets.pomodoro);
