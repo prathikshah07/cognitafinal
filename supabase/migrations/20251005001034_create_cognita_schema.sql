@@ -84,6 +84,15 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at timestamptz DEFAULT now()
 );
 
+-- Create ai_entries table
+CREATE TABLE IF NOT EXISTS ai_entries (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  entry_text text NOT NULL,
+  response_text text NOT NULL,
+  created_at timestamptz DEFAULT now()
+);
+
 -- Enable RLS on all tables
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_sessions ENABLE ROW LEVEL SECURITY;
@@ -92,6 +101,7 @@ ALTER TABLE habit_completions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE finances ENABLE ROW LEVEL SECURITY;
 ALTER TABLE mood_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_entries ENABLE ROW LEVEL SECURITY;
 
 -- Profiles policies
 CREATE POLICY "Users can view own profile"
@@ -242,6 +252,28 @@ CREATE POLICY "Users can delete own tasks"
   TO authenticated
   USING (auth.uid() = user_id);
 
+-- AI entries policies
+CREATE POLICY "Users can view own ai entries"
+  ON ai_entries FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own ai entries"
+  ON ai_entries FOR INSERT
+  TO authenticated
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own ai entries"
+  ON ai_entries FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own ai entries"
+  ON ai_entries FOR DELETE
+  TO authenticated
+  USING (auth.uid() = user_id);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS study_sessions_user_id_idx ON study_sessions(user_id);
 CREATE INDEX IF NOT EXISTS study_sessions_session_date_idx ON study_sessions(session_date);
@@ -254,3 +286,5 @@ CREATE INDEX IF NOT EXISTS mood_entries_user_id_idx ON mood_entries(user_id);
 CREATE INDEX IF NOT EXISTS mood_entries_entry_date_idx ON mood_entries(entry_date);
 CREATE INDEX IF NOT EXISTS tasks_user_id_idx ON tasks(user_id);
 CREATE INDEX IF NOT EXISTS tasks_due_date_idx ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS ai_entries_user_id_idx ON ai_entries(user_id);
+CREATE INDEX IF NOT EXISTS ai_entries_created_at_idx ON ai_entries(created_at);

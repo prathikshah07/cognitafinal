@@ -1,0 +1,42 @@
+src/app/api/chat/route.ts
+import { supabase } from "@/lib/supabaseClient"
+
+export async function POST(req: Request) {
+  try {
+    const { userPrompt, userId } = await req.json()
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 })
+    }
+
+    const res = await fetch("https://api.cerebras.ai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.CEREBRAS_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama3.1-8b",
+        messages: [
+          { role: "system", content: "You are Cognita, an AI assistant for learners." },
+          { role: "user", content: userPrompt },
+        ],
+      }),
+    })
+
+    const data = await res.json()
+
+    await supabase.from("chat_history").insert([
+      {
+        user_id: userId,
+        prompt: userPrompt,
+        response: data.choices?.[0]?.message?.content,
+      },
+    ])
+
+    return new Response(JSON.stringify(data), { status: 200 })
+  } catch (err) {
+    console.error(err)
+    return new Response(JSON.stringify({ error: "Server error" }), { status: 500 })
+  }
+}

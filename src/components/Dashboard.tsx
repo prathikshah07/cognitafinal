@@ -1,408 +1,368 @@
-import { BookOpen, CheckCircle2, DollarSign, Smile, CheckSquare, TrendingUp, PieChart } from 'lucide-react';
-import { StudySession, Habit, FinanceTransaction, MoodEntry, Task } from '../types';
+import { useState, useEffect } from 'react'
+import { User, LogOut, Brain, BarChart3, Zap } from 'lucide-react'
+import { supabaseClient as supabase } from '../lib/supabaseClient'
+import { StudySession, FinanceTransaction, MoodEntry, Habit, Task } from '../types'
+import CognitaAI from './CognitaAI'
+import CognitaAnalytics from './CognitaAnalytics'
+import StudyTracker from './StudyTracker'
+import FinanceTracker from './FinanceTracker'
+import MoodTracker from './MoodTracker'
+import HabitTracker from './HabitTracker'
+import TaskManager from './TaskManager'
 
 interface DashboardProps {
-  studySessions: StudySession[];
-  habits: Habit[];
-  finances: FinanceTransaction[];
-  moodEntries: MoodEntry[];
-  tasks: Task[];
+  user: any
 }
 
-export default function Dashboard({ studySessions, habits, finances, moodEntries, tasks }: DashboardProps) {
-  const today = new Date().toISOString().split('T')[0];
+export default function Dashboard({ user }: DashboardProps) {
+  const [activeTab, setActiveTab] = useState('ai')
+  const [userProfile, setUserProfile] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [studySessions, setStudySessions] = useState<StudySession[]>([])
+  const [transactions, setTransactions] = useState<FinanceTransaction[]>([])
+  const [moodEntries, setMoodEntries] = useState<MoodEntry[]>([])
+  const [habits, setHabits] = useState<Habit[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
 
-  const todayStudyMinutes = studySessions
-    .filter(s => new Date(s.sessionDate).toDateString() === new Date().toDateString())
-    .reduce((sum, s) => sum + s.durationMinutes, 0);
+  const loadUserProfile = async () => {
+    setIsLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single()
 
-  const activeHabits = habits.filter(h => h.isActive).length;
-  const todayHabitCompletions = habits.filter(h => h.isActive && h.completions.has(today)).length;
-  const habitCompletionRate = activeHabits > 0 ? Math.round((todayHabitCompletions / activeHabits) * 100) : 0;
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading profile:', error)
+      } else {
+        setUserProfile(data)
+      }
+    } catch (error) {
+      console.error('Profile load error:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-  const balance = finances.reduce((sum, t) =>
-    sum + (t.type === 'income' ? t.amount : -t.amount), 0
-  );
+  const handleSignOut = async () => {
+    const { error } = await supabase.auth.signOut()
+    if (error) {
+      console.error('Error signing out:', error)
+    }
+  }
 
-  const todayMood = moodEntries.find(e => e.entryDate === today);
+  const handleAddStudySession = (session: Omit<StudySession, 'id'>) => {
+    const newSession: StudySession = {
+      ...session,
+      id: Date.now().toString() // Simple ID generation for now
+    }
+    setStudySessions(prev => [...prev, newSession])
+  }
 
-  const pendingTasks = tasks.filter(t => t.status !== 'completed').length;
-  const completedTasks = tasks.filter(t => t.status === 'completed').length;
-  const totalTasks = tasks.length;
-  const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const handleDeleteStudySession = (id: string) => {
+    setStudySessions(prev => prev.filter(session => session.id !== id))
+  }
 
-  const upcomingTasks = tasks.filter(t => {
-    if (t.status === 'completed' || !t.dueDate) return false;
-    const dueDate = new Date(t.dueDate);
-    const now = new Date();
-    const diffTime = dueDate.getTime() - now.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays <= 3 && diffDays >= 0;
-  });
+  const handleAddTransaction = (transaction: Omit<FinanceTransaction, 'id'>) => {
+    const newTransaction: FinanceTransaction = {
+      ...transaction,
+      id: Date.now().toString() // Simple ID generation for now
+    }
+    setTransactions(prev => [...prev, newTransaction])
+  }
 
-  const last7DaysStudy = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    const dayStudy = studySessions
-      .filter(s => new Date(s.sessionDate).toDateString() === date.toDateString())
-      .reduce((sum, s) => sum + s.durationMinutes, 0);
-    return {
-      day: date.toLocaleDateString('en', { weekday: 'short' }),
-      minutes: dayStudy
-    };
-  });
+  const handleDeleteTransaction = (id: string) => {
+    setTransactions(prev => prev.filter(transaction => transaction.id !== id))
+  }
 
-  const maxStudyMinutes = Math.max(...last7DaysStudy.map(d => d.minutes), 1);
+  const handleAddMoodEntry = (entry: Omit<MoodEntry, 'id'>) => {
+    const newEntry: MoodEntry = {
+      ...entry,
+      id: Date.now().toString()
+    }
+    setMoodEntries(prev => [...prev, newEntry])
+  }
 
-  const weekExpenses = finances
-    .filter(t => {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      return t.type === 'expense' && new Date(t.transactionDate) >= weekAgo;
-    })
-    .reduce((sum, t) => sum + t.amount, 0);
+  const handleAddHabit = (habit: Omit<Habit, 'id' | 'completions'>) => {
+    const newHabit: Habit = {
+      ...habit,
+      id: Date.now().toString(),
+      completions: new Set()
+    }
+    setHabits(prev => [...prev, newHabit])
+  }
 
-  const last7DaysMood = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    const dateStr = date.toISOString().split('T')[0];
-    const entry = moodEntries.find(e => e.entryDate === dateStr);
-    return {
-      day: date.toLocaleDateString('en', { weekday: 'short' }),
-      mood: entry?.moodRating || 0,
-      energy: entry?.energyLevel || 0,
-      stress: entry?.stressLevel || 0
-    };
-  });
+  const handleToggleHabitCompletion = (habitId: string, date: string) => {
+    setHabits(prev => prev.map(habit => {
+      if (habit.id === habitId) {
+        const newCompletions = new Set(habit.completions)
+        if (newCompletions.has(date)) {
+          newCompletions.delete(date)
+        } else {
+          newCompletions.add(date)
+        }
+        return { ...habit, completions: newCompletions }
+      }
+      return habit
+    }))
+  }
 
-  const expensesByCategory = finances
-    .filter(t => t.type === 'expense')
-    .reduce((acc, t) => {
-      acc[t.category] = (acc[t.category] || 0) + t.amount;
-      return acc;
-    }, {} as Record<string, number>);
+  const handleDeleteHabit = (id: string) => {
+    setHabits(prev => prev.filter(habit => habit.id !== id))
+  }
 
-  const topExpenseCategories = Object.entries(expensesByCategory)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+  const handleAddTask = (task: Omit<Task, 'id' | 'completedAt'>) => {
+    const newTask: Task = {
+      ...task,
+      id: Date.now().toString()
+    }
+    setTasks(prev => [...prev, newTask])
+  }
 
-  const totalExpenses = topExpenseCategories.reduce((sum, [, amount]) => sum + amount, 0);
+  const handleUpdateTask = (id: string, updates: Partial<Task>) => {
+    setTasks(prev => prev.map(task => 
+      task.id === id ? { ...task, ...updates } : task
+    ))
+  }
 
-  const subjectStudyTime = studySessions.reduce((acc, s) => {
-    acc[s.subject] = (acc[s.subject] || 0) + s.durationMinutes;
-    return acc;
-  }, {} as Record<string, number>);
+  const handleDeleteTask = (id: string) => {
+    setTasks(prev => prev.filter(task => task.id !== id))
+  }
 
-  const topSubjects = Object.entries(subjectStudyTime)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+  useEffect(() => {
+    loadUserProfile()
+  }, [user.id])
 
-  const categoryColors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  const tabs = [
+    { id: 'ai', label: 'Cognita AI', icon: Brain, color: 'text-purple-400' },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, color: 'text-cyan-400' },
+    { id: 'study', label: 'Study', icon: Brain, color: 'text-blue-400' },
+    { id: 'finance', label: 'Finance', icon: Brain, color: 'text-green-400' },
+    { id: 'mood', label: 'Mood', icon: Brain, color: 'text-pink-400' },
+    { id: 'habits', label: 'Habits', icon: Brain, color: 'text-indigo-400' },
+    { id: 'tasks', label: 'Tasks', icon: Brain, color: 'text-orange-400' },
+  ]
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="cyber-spinner mx-auto mb-4"></div>
+          <p className="text-gray-400 font-mono">Loading your profile...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-br from-blue-600 to-violet-600 rounded-xl shadow-lg p-6 text-white">
-        <h1 className="text-3xl font-bold mb-2">Welcome Back!</h1>
-        <p className="text-blue-100">Here's your progress overview for today</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-blue-600 mb-2">
-                <BookOpen className="w-5 h-5" />
-                <span className="text-sm font-medium">Study Time Today</span>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white">
+      {/* Header */}
+      <header className="cyber-glass border-b border-cyan-500/30 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 cyber-glass rounded-full flex items-center justify-center">
+                <Zap className="w-5 h-5 text-cyan-400" />
               </div>
-              <p className="text-3xl font-bold text-gray-900">
-                {Math.floor(todayStudyMinutes / 60)}h {todayStudyMinutes % 60}m
-              </p>
-              <p className="text-sm text-gray-500 mt-1">
-                {studySessions.length} total sessions
-              </p>
+              <h1 className="text-2xl font-cyber font-bold neon-text">COGNITA</h1>
             </div>
-            <div className="p-3 bg-blue-50 rounded-lg">
-              <BookOpen className="w-6 h-6 text-blue-600" />
-            </div>
-          </div>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-green-600 mb-2">
-                <CheckCircle2 className="w-5 h-5" />
-                <span className="text-sm font-medium">Habits Today</span>
-              </div>
-              <p className="text-3xl font-bold text-gray-900">{habitCompletionRate}%</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {todayHabitCompletions} of {activeHabits} completed
-              </p>
-            </div>
-            <div className="p-3 bg-green-50 rounded-lg">
-              <CheckCircle2 className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-emerald-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-emerald-600 mb-2">
-                <DollarSign className="w-5 h-5" />
-                <span className="text-sm font-medium">Balance</span>
-              </div>
-              <p className="text-3xl font-bold text-gray-900">${balance.toFixed(2)}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                ${weekExpenses.toFixed(2)} spent this week
-              </p>
-            </div>
-            <div className="p-3 bg-emerald-50 rounded-lg">
-              <DollarSign className="w-6 h-6 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-yellow-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-yellow-600 mb-2">
-                <Smile className="w-5 h-5" />
-                <span className="text-sm font-medium">Today's Mood</span>
-              </div>
-              {todayMood ? (
-                <>
-                  <p className="text-3xl font-bold text-gray-900">{todayMood.moodRating}/5</p>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Energy: {todayMood.energyLevel}/5, Stress: {todayMood.stressLevel}/5
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xl font-medium text-gray-400">Not logged</p>
-                  <p className="text-sm text-gray-500 mt-1">Log your mood today</p>
-                </>
-              )}
-            </div>
-            <div className="p-3 bg-yellow-50 rounded-lg">
-              <Smile className="w-6 h-6 text-yellow-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-violet-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-violet-600 mb-2">
-                <CheckSquare className="w-5 h-5" />
-                <span className="text-sm font-medium">Task Progress</span>
-              </div>
-              <p className="text-3xl font-bold text-gray-900">{taskCompletionRate}%</p>
-              <p className="text-sm text-gray-500 mt-1">
-                {completedTasks} of {totalTasks} completed
-              </p>
-            </div>
-            <div className="p-3 bg-violet-50 rounded-lg">
-              <CheckSquare className="w-6 h-6 text-violet-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-orange-500">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-orange-600 mb-2">
-                <TrendingUp className="w-5 h-5" />
-                <span className="text-sm font-medium">Upcoming Tasks</span>
-              </div>
-              <p className="text-3xl font-bold text-gray-900">{upcomingTasks.length}</p>
-              <p className="text-sm text-gray-500 mt-1">
-                Due in the next 3 days
-              </p>
-            </div>
-            <div className="p-3 bg-orange-50 rounded-lg">
-              <TrendingUp className="w-6 h-6 text-orange-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Study Activity (Last 7 Days)</h3>
-          <div className="flex items-end justify-between gap-2 h-48">
-            {last7DaysStudy.map((day, index) => {
-              const height = (day.minutes / maxStudyMinutes) * 100;
-              return (
-                <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                  <div className="w-full bg-gray-100 rounded-t-lg flex items-end justify-center" style={{ height: '100%' }}>
-                    <div
-                      className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg transition-all flex items-end justify-center pb-2"
-                      style={{ height: `${height}%`, minHeight: day.minutes > 0 ? '20%' : '0%' }}
-                    >
-                      {day.minutes > 0 && (
-                        <span className="text-xs font-medium text-white">
-                          {day.minutes}m
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <span className="text-xs font-medium text-gray-600">{day.day}</span>
+            {/* User Menu */}
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <div className="text-sm font-cyber text-cyan-300">
+                  {userProfile?.display_name || user.email?.split('@')[0] || 'User'}
                 </div>
-              );
+                <div className="text-xs text-gray-500 font-mono">Neural Interface Active</div>
+              </div>
+              <div className="w-8 h-8 cyber-glass rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-gray-400" />
+              </div>
+              <button
+                onClick={handleSignOut}
+                className="cyber-button-secondary px-3 py-1 text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation */}
+      <nav className="cyber-glass border-b border-gray-700/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex space-x-1 py-4 overflow-x-auto">
+            {tabs.map((tab) => {
+              const Icon = tab.icon
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-cyber text-sm font-semibold transition-all duration-300 whitespace-nowrap ${
+                    activeTab === tab.id
+                      ? `cyber-button ${tab.color} border-current`
+                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {tab.label}
+                </button>
+              )
             })}
           </div>
         </div>
+      </nav>
 
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Mood Trends (Last 7 Days)</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Mood</span>
-                <span className="text-sm text-gray-500">😊</span>
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="animate-fade-in">
+          {activeTab === 'ai' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold neon-text mb-4">
+                  Welcome to Cognita AI
+                </h2>
+                <p className="text-gray-400 font-mono max-w-2xl mx-auto leading-relaxed">
+                  Your intelligent academic companion analyzes five essential domains of student life: 
+                  study patterns, financial habits, emotional wellbeing, daily routines, and time management. 
+                  Submit your daily experiences below for personalized insights and strategic guidance.
+                </p>
               </div>
-              <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full bg-gradient-to-t from-yellow-400 to-yellow-300 rounded-t transition-all"
-                      style={{ height: `${(day.mood / 5) * 100}%`, minHeight: day.mood > 0 ? '10%' : '2%' }}
-                    />
-                    <span className="text-xs text-gray-500">{day.day[0]}</span>
-                  </div>
-                ))}
-              </div>
+              <CognitaAI userId={user.id} />
             </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Energy</span>
-                <span className="text-sm text-gray-500">⚡</span>
-              </div>
-              <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full bg-gradient-to-t from-green-400 to-green-300 rounded-t transition-all"
-                      style={{ height: `${(day.energy / 5) * 100}%`, minHeight: day.energy > 0 ? '10%' : '2%' }}
-                    />
-                    <span className="text-xs text-gray-500">{day.day[0]}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Stress</span>
-                <span className="text-sm text-gray-500">😰</span>
-              </div>
-              <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                    <div
-                      className="w-full bg-gradient-to-t from-red-400 to-red-300 rounded-t transition-all"
-                      style={{ height: `${(day.stress / 5) * 100}%`, minHeight: day.stress > 0 ? '10%' : '2%' }}
-                    />
-                    <span className="text-xs text-gray-500">{day.day[0]}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <PieChart className="w-5 h-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Spending by Category</h3>
-          </div>
-          {topExpenseCategories.length > 0 ? (
-            <div className="space-y-3">
-              {topExpenseCategories.map(([category, amount], index) => {
-                const percentage = (amount / totalExpenses) * 100;
-                return (
-                  <div key={category}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{category}</span>
-                      <span className="text-sm text-gray-600">${amount.toFixed(2)}</span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{
-                          width: `${percentage}%`,
-                          backgroundColor: categoryColors[index % categoryColors.length]
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+          {activeTab === 'analytics' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold neon-text mb-4">
+                  Performance Analytics
+                </h2>
+                <p className="text-gray-400 font-mono max-w-2xl mx-auto">
+                  Cognita's comprehensive analysis of your academic and personal growth across all life domains.
+                </p>
+              </div>
+              <CognitaAnalytics userId={user.id} />
             </div>
-          ) : (
-            <p className="text-center text-gray-500 py-8">No expense data yet</p>
+          )}
+
+          {activeTab === 'study' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold text-blue-400 mb-4">
+                  Study Tracker
+                </h2>
+                <p className="text-gray-400 font-mono">
+                  Monitor your learning sessions, subjects, and academic progress.
+                </p>
+              </div>
+              <StudyTracker 
+                sessions={studySessions}
+                onAddSession={handleAddStudySession}
+                onDeleteSession={handleDeleteStudySession}
+              />
+            </div>
+          )}
+
+          {activeTab === 'finance' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold text-green-400 mb-4">
+                  Financial Management
+                </h2>
+                <p className="text-gray-400 font-mono">
+                  Track expenses and maintain financial discipline for academic success.
+                </p>
+              </div>
+              <FinanceTracker 
+                transactions={transactions}
+                onAddTransaction={handleAddTransaction}
+                onDeleteTransaction={handleDeleteTransaction}
+              />
+            </div>
+          )}
+
+          {activeTab === 'mood' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold text-pink-400 mb-4">
+                  Mood & Wellbeing
+                </h2>
+                <p className="text-gray-400 font-mono">
+                  Monitor emotional patterns and maintain optimal mental health.
+                </p>
+              </div>
+              <MoodTracker 
+                entries={moodEntries}
+                onAddEntry={handleAddMoodEntry}
+              />
+            </div>
+          )}
+
+          {activeTab === 'habits' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold text-indigo-400 mb-4">
+                  Habit Formation
+                </h2>
+                <p className="text-gray-400 font-mono">
+                  Build consistent routines that support your academic goals.
+                </p>
+              </div>
+              <HabitTracker 
+                habits={habits}
+                onAddHabit={handleAddHabit}
+                onToggleCompletion={handleToggleHabitCompletion}
+                onDeleteHabit={handleDeleteHabit}
+              />
+            </div>
+          )}
+
+          {activeTab === 'tasks' && (
+            <div className="space-y-8">
+              <div className="text-center mb-8">
+                <h2 className="text-3xl font-cyber font-bold text-orange-400 mb-4">
+                  Task Management
+                </h2>
+                <p className="text-gray-400 font-mono">
+                  Organize assignments, projects, and academic responsibilities.
+                </p>
+              </div>
+              <TaskManager 
+                tasks={tasks}
+                onAddTask={handleAddTask}
+                onUpdateTask={handleUpdateTask}
+                onDeleteTask={handleDeleteTask}
+              />
+            </div>
           )}
         </div>
+      </main>
 
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <BookOpen className="w-5 h-5 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Study Time by Subject</h3>
-          </div>
-          {topSubjects.length > 0 ? (
-            <div className="space-y-3">
-              {topSubjects.map(([subject, minutes], index) => {
-                const maxMinutes = Math.max(...topSubjects.map(([, m]) => m));
-                const percentage = (minutes / maxMinutes) * 100;
-                return (
-                  <div key={subject}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium text-gray-700">{subject}</span>
-                      <span className="text-sm text-gray-600">
-                        {Math.floor(minutes / 60)}h {minutes % 60}m
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-100 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{
-                          width: `${percentage}%`,
-                          backgroundColor: categoryColors[index % categoryColors.length]
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+      {/* Footer */}
+      <footer className="cyber-glass border-t border-gray-700/50 mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Zap className="w-4 h-4 text-cyan-400" />
+              <span className="font-cyber text-cyan-300 text-sm">COGNITA AI SYSTEM</span>
             </div>
-          ) : (
-            <p className="text-center text-gray-500 py-8">No study data yet</p>
-          )}
+            <p className="text-xs text-gray-500 font-mono">
+              Intelligent Academic Companion • Neural Interface v2.0 • Quantum-Safe Encryption
+            </p>
+          </div>
+        </div>
+      </footer>
+
+      {/* Floating elements */}
+      <div className="fixed bottom-6 right-6">
+        <div className="cyber-glass p-3 rounded-full border border-cyan-500/50">
+          <Brain className="w-6 h-6 text-cyan-400 animate-cyber-pulse" />
         </div>
       </div>
-
-      {upcomingTasks.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Upcoming Deadlines</h3>
-          <div className="space-y-2">
-            {upcomingTasks.slice(0, 5).map((task) => (
-              <div key={task.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
-                <div>
-                  <h4 className="font-medium text-gray-900">{task.title}</h4>
-                  <p className="text-sm text-gray-600">
-                    Due {new Date(task.dueDate!).toLocaleDateString()}
-                  </p>
-                </div>
-                <span className="text-xs px-2 py-1 bg-orange-200 text-orange-700 rounded capitalize">
-                  {task.priority}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
-  );
+  )
 }
