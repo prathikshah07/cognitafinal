@@ -75,31 +75,58 @@ function App() {
   };
 
   const loadHabits = async () => {
-    const { data: habitsData } = await supabase
+    const { data: habitsData, error: habitsError } = await supabase
       .from('habits')
       .select('*')
       .eq('is_active', true);
 
-    if (habitsData) {
-      const habitsWithCompletions = await Promise.all(
-        habitsData.map(async (h) => {
-          const { data: completions } = await supabase
-            .from('habit_completions')
-            .select('completion_date')
-            .eq('habit_id', h.id);
+    if (habitsError) return;
 
-          return {
+    if (habitsData && habitsData.length > 0) {
+      const habitIds = habitsData.map((h) => h.id);
+
+      const { data: completionsData, error: completionsError } = await supabase
+        .from('habit_completions')
+        .select('habit_id,completion_date')
+        .in('habit_id', habitIds);
+
+      if (completionsError) {
+        // If the completions query fails, still hydrate habits without completions
+        setHabits(
+          habitsData.map((h) => ({
             id: h.id,
             name: h.name,
             description: h.description,
             targetFrequency: h.target_frequency as 'daily' | 'weekly',
             color: h.color,
             isActive: h.is_active,
-            completions: new Set(completions?.map(c => c.completion_date) || [])
-          };
-        })
-      );
+            completions: new Set<string>(),
+          }))
+        );
+        return;
+      }
+
+      const completionsByHabit = new Map<string, Set<string>>();
+      (completionsData || []).forEach((c: { habit_id: string; completion_date: string }) => {
+        if (!completionsByHabit.has(c.habit_id)) {
+          completionsByHabit.set(c.habit_id, new Set<string>());
+        }
+        completionsByHabit.get(c.habit_id)!.add(c.completion_date);
+      });
+
+      const habitsWithCompletions = habitsData.map((h) => ({
+        id: h.id,
+        name: h.name,
+        description: h.description,
+        targetFrequency: h.target_frequency as 'daily' | 'weekly',
+        color: h.color,
+        isActive: h.is_active,
+        completions: completionsByHabit.get(h.id) || new Set<string>(),
+      }));
+
       setHabits(habitsWithCompletions);
+    } else {
+      setHabits([]);
     }
   };
 
@@ -362,7 +389,7 @@ function App() {
   };
 
   const updateTask = async (id: string, updates: Partial<Task>) => {
-    const dbUpdates: any = {};
+    const dbUpdates: Record<string, unknown> = {};
     if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
     if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate?.toISOString();

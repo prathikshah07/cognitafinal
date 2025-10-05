@@ -26,7 +26,6 @@ export default function Dashboard({ studySessions, habits, finances, moodEntries
 
   const todayMood = moodEntries.find(e => e.entryDate === today);
 
-  const pendingTasks = tasks.filter(t => t.status !== 'completed').length;
   const completedTasks = tasks.filter(t => t.status === 'completed').length;
   const totalTasks = tasks.length;
   const taskCompletionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
@@ -231,10 +230,10 @@ export default function Dashboard({ studySessions, habits, finances, moodEntries
         <div className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Study Activity (Last 7 Days)</h3>
           <div className="flex items-end justify-between gap-2 h-48">
-            {last7DaysStudy.map((day, index) => {
+            {last7DaysStudy.map((day) => {
               const height = (day.minutes / maxStudyMinutes) * 100;
               return (
-                <div key={index} className="flex-1 flex flex-col items-center gap-2">
+                <div key={day.day} className="flex-1 flex flex-col items-center gap-2">
                   <div className="w-full bg-gray-100 rounded-t-lg flex items-end justify-center" style={{ height: '100%' }}>
                     <div
                       className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-lg transition-all flex items-end justify-center pb-2"
@@ -263,8 +262,8 @@ export default function Dashboard({ studySessions, habits, finances, moodEntries
                 <span className="text-sm text-gray-500">😊</span>
               </div>
               <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                {last7DaysMood.map((day) => (
+                  <div key={`mood-${day.day}`} className="flex-1 flex flex-col items-center gap-1">
                     <div
                       className="w-full bg-gradient-to-t from-yellow-400 to-yellow-300 rounded-t transition-all"
                       style={{ height: `${(day.mood / 5) * 100}%`, minHeight: day.mood > 0 ? '10%' : '2%' }}
@@ -280,8 +279,8 @@ export default function Dashboard({ studySessions, habits, finances, moodEntries
                 <span className="text-sm text-gray-500">⚡</span>
               </div>
               <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                {last7DaysMood.map((day) => (
+                  <div key={`energy-${day.day}`} className="flex-1 flex flex-col items-center gap-1">
                     <div
                       className="w-full bg-gradient-to-t from-green-400 to-green-300 rounded-t transition-all"
                       style={{ height: `${(day.energy / 5) * 100}%`, minHeight: day.energy > 0 ? '10%' : '2%' }}
@@ -297,8 +296,8 @@ export default function Dashboard({ studySessions, habits, finances, moodEntries
                 <span className="text-sm text-gray-500">😰</span>
               </div>
               <div className="flex gap-1 h-12 items-end">
-                {last7DaysMood.map((day, i) => (
-                  <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                {last7DaysMood.map((day) => (
+                  <div key={`stress-${day.day}`} className="flex-1 flex flex-col items-center gap-1">
                     <div
                       className="w-full bg-gradient-to-t from-red-400 to-red-300 rounded-t transition-all"
                       style={{ height: `${(day.stress / 5) * 100}%`, minHeight: day.stress > 0 ? '10%' : '2%' }}

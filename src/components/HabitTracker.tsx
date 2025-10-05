@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Circle, Plus, Settings, Trash2 } from 'lucide-react';
+import { CheckCircle2, Circle, Plus, Trash2 } from 'lucide-react';
 import { Habit } from '../types';
 
 interface HabitTrackerProps {
